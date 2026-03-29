@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Search, Loader2, GitCommit, Users, Activity } from 'lucide-react';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
@@ -10,6 +11,7 @@ const PIE_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#647
 const TABS = ['All', 'Feature', 'Bug Fix', 'Refactor', 'Docs', 'Test', 'Chore'];
 
 export default function Dashboard() {
+  const { id } = useParams();
   const [repoUrl, setRepoUrl] = useState('');
   const [repoData, setRepoData] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -17,6 +19,52 @@ export default function Dashboard() {
 
   const [activeTab, setActiveTab] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Effect to load repo by ID if provided in URL
+  useEffect(() => {
+    if (id) {
+      loadRepo(id);
+    }
+  }, [id]);
+
+  const loadRepo = async (repoId) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const statusRes = await axios.get(`http://localhost:5000/api/repos/${repoId}`);
+      if (statusRes.data.repository.status === 'completed') {
+        setRepoData(statusRes.data);
+        setLoading(false);
+      } else {
+        // Start polling if still analyzing
+        startPolling(repoId);
+      }
+    } catch (err) {
+      setError("Failed to load repository data.");
+      setLoading(false);
+    }
+  };
+
+  const startPolling = (repoId) => {
+    setLoading(true);
+    const poll = setInterval(async () => {
+      try {
+        const statusRes = await axios.get(`http://localhost:5000/api/repos/${repoId}`);
+        if (statusRes.data.repository.status === 'completed') {
+          setRepoData(statusRes.data);
+          setLoading(false);
+          clearInterval(poll);
+        } else if (statusRes.data.repository.status === 'failed') {
+          setError("Analysis failed.");
+          setLoading(false);
+          clearInterval(poll);
+        }
+      } catch (err) {
+        console.error("Polling error", err);
+      }
+    }, 3000);
+    setTimeout(() => { clearInterval(poll); setLoading(false); }, 120000);
+  };
 
   const analyzeRepo = async (e) => {
     e.preventDefault();
@@ -28,25 +76,7 @@ export default function Dashboard() {
     try {
       const res = await axios.post('http://localhost:5000/api/repos/analyze', { url: repoUrl });
       const repoId = res.data.repoId;
-
-      const poll = setInterval(async () => {
-        try {
-          const statusRes = await axios.get(`http://localhost:5000/api/repos/${repoId}`);
-          if (statusRes.data.repository.status === 'completed') {
-            setRepoData(statusRes.data);
-            setLoading(false);
-            clearInterval(poll);
-          } else if (statusRes.data.repository.status === 'failed') {
-            setError("Analysis failed on the backend.");
-            setLoading(false);
-            clearInterval(poll);
-          }
-        } catch (err) {
-          console.error("Polling error", err);
-        }
-      }, 3000);
-
-      setTimeout(() => { clearInterval(poll); setLoading(false); }, 120000);
+      startPolling(repoId);
     } catch (err) {
       setError(err.response?.data?.message || "Failed to start analysis (Are you logged in?)");
       setLoading(false);
@@ -87,6 +117,51 @@ export default function Dashboard() {
       return matchesSearch && matchesTab;
     });
   }, [commits, activeTab, searchQuery]);
+
+  const heatmapData = useMemo(() => {
+    if (!commits || commits.length === 0) {
+      // Return 30 generic days if no data
+      return Array.from({ length: 30 }, (_, i) => {
+        const d = new Date();
+        d.setDate(d.getDate() - (29 - i));
+        return { date: d.toISOString().split('T')[0], count: 0 };
+      });
+    }
+
+    const dateCounts = {};
+    let minDate = new Date();
+    let maxDate = new Date(0);
+
+    commits.forEach(c => {
+      if (c.date) {
+        const d = new Date(c.date);
+        if (d < minDate) minDate = d;
+        if (d > maxDate) maxDate = d;
+        const dateStr = d.toISOString().split('T')[0];
+        dateCounts[dateStr] = (dateCounts[dateStr] || 0) + 1;
+      }
+    });
+
+    // Normalize to start of day for comparison
+    const start = new Date(minDate);
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(maxDate);
+    end.setHours(0, 0, 0, 0);
+
+    const days = [];
+    let curr = new Date(start);
+    // Limit to reasonable range if repo is extremely old, but for this project we'll show all
+    // to satisfy the "earliest to latest" requirement.
+    while (curr <= end) {
+      const dateStr = curr.toISOString().split('T')[0];
+      days.push({ date: dateStr, count: dateCounts[dateStr] || 0 });
+      curr.setDate(curr.getDate() + 1);
+      
+      // Safety break to prevent infinite loops or millions of days
+      if (days.length > 2000) break; 
+    }
+    return days;
+  }, [commits]);
 
   const getScoreGrade = (score) => {
     if (score >= 90) return { letter: 'A', color: 'text-emerald-500 bg-emerald-500/10' };
@@ -267,16 +342,23 @@ export default function Dashboard() {
           {/* Contribution Heatmap */}
           <Card animate>
             <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-4">Contribution Heatmap</p>
-            <div className="flex items-center gap-1.5 flex-wrap">
-              {/* Generate 50 fake heatmap blocks based on commit data density */}
-              {Array.from({ length: 80 }).map((_, i) => {
-                let factor = Math.random();
+            <div className="flex items-center gap-1.5 flex-wrap pt-4">
+              {heatmapData.map((day, i) => {
                 let colorClass = 'bg-muted/30';
-                if (factor > 0.8) colorClass = 'bg-emerald-500';
-                else if (factor > 0.5) colorClass = 'bg-emerald-500/60';
-                else if (factor > 0.3) colorClass = 'bg-emerald-500/30';
+                if (day.count >= 4) colorClass = 'bg-emerald-500';
+                else if (day.count >= 2) colorClass = 'bg-emerald-500/80';
+                else if (day.count === 1) colorClass = 'bg-emerald-500/40';
 
-                return <div key={i} className={`w-3 h-3 rounded-[2px] ${colorClass}`} />
+                return (
+                  <div 
+                    key={i} 
+                    className={`group relative w-3 h-3 rounded-[2px] transition ${colorClass} hover:ring-2 hover:ring-emerald-400 cursor-pointer`}
+                  >
+                    <div className="absolute bottom-full mb-1.5 left-1/2 -translate-x-1/2 hidden group-hover:block bg-gray-900 text-white border border-white/10 text-[10px] px-2 py-1 rounded whitespace-nowrap z-50 shadow-xl pointer-events-none">
+                      {day.count} commits on {day.date}
+                    </div>
+                  </div>
+                );
               })}
             </div>
             <div className="flex items-center gap-2 mt-4 text-xs text-muted-foreground font-medium">

@@ -47,4 +47,15 @@ const summarizeRepo = async (commitsInfo) => {
   }
 };
 
-module.exports = { analyzeCommit, summarizeRepo };
+const heuristicAnalyze = (message) => {
+  const msg = message.toLowerCase();
+  if (msg.includes('feat') || msg.includes('add') || msg.includes('implement')) return 'Feature';
+  if (msg.includes('fix') || msg.includes('bug') || msg.includes('hotfix')) return 'Bug Fix';
+  if (msg.includes('refactor') || msg.includes('clean') || msg.includes('move')) return 'Refactor';
+  if (msg.includes('docs') || msg.includes('readme') || msg.includes('documentation')) return 'Docs';
+  if (msg.includes('test') || msg.includes('spec')) return 'Test';
+  if (msg.includes('chore') || msg.includes('build') || msg.includes('ci') || msg.includes('config')) return 'Chore';
+  return 'Other';
+};
+
+module.exports = { analyzeCommit, summarizeRepo, heuristicAnalyze };

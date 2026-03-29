@@ -4,6 +4,7 @@ import Navbar from './components/layout/Navbar';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
+import Home from './pages/Home';
 
 const ProtectedRoute = ({ children }) => {
   const { user } = useAuth();
@@ -31,9 +32,9 @@ function App() {
             <Routes>
               {/* Redirect root to dashboard or login */}
               <Route path="/" element={
-                 <PublicRoute>
-                   <Navigate to="/login" replace />
-                 </PublicRoute>
+                 <ProtectedRoute>
+                   <Home />
+                 </ProtectedRoute>
               } />
               
               <Route path="/login" element={
@@ -49,6 +50,12 @@ function App() {
               } />
               
               <Route path="/dashboard" element={
+                 <ProtectedRoute>
+                   <Dashboard />
+                 </ProtectedRoute>
+              } />
+
+              <Route path="/dashboard/:id" element={
                  <ProtectedRoute>
                    <Dashboard />
                  </ProtectedRoute>

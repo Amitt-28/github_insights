@@ -24,9 +24,9 @@ export default function Navbar() {
     <nav className="fixed top-0 w-full z-50 border-b border-border/40 bg-background/60 backdrop-blur-xl supports-[backdrop-filter]:bg-background/40">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
-          <div className="flex flex-shrink-0 items-center gap-3">
-             <span className="font-bold text-xl tracking-tight hidden sm:block">Pulse</span>
-          </div>
+           <div className="flex flex-shrink-0 items-center gap-3">
+              <Link to="/" className="font-bold text-xl tracking-tight hidden sm:block">Pulse</Link>
+           </div>
           
           <div className="flex items-center gap-4">
             <button 
@@ -37,9 +37,13 @@ export default function Navbar() {
             </button>
             
             {user ? (
-               <div className="flex items-center gap-4">
-                 {user?.username && <span className="text-sm font-medium text-muted-foreground mr-2">Hey, {user.username}</span>}
-                 <Link to="/dashboard" className="text-sm font-medium hover:text-accent transition">Dashboard</Link>
+                <div className="flex items-center gap-4">
+                  {user?.username && (
+                    <Link to="/" className="text-sm font-medium text-muted-foreground hover:text-foreground transition mr-2">
+                      Hey, {user.username}
+                    </Link>
+                  )}
+                  <Link to="/dashboard" className="text-sm font-medium hover:text-accent transition">New Analysis</Link>
                  <button onClick={logout} className="text-sm font-medium text-muted-foreground hover:text-red-500 transition">Logout</button>
                </div>
             ) : (

@@ -58,32 +58,54 @@ const processRepoData = async (repo, owner, name) => {
     // Process Commits & run Gemini Analysis
     let commitInfoText = "";
     
-    // Process top 10 commits to avoid passing Gemini free tier rate limits for MVP
-    const commitsToProcess = ghCommits.slice(0, 10);
+    // Process all commits, and run Gemini analysis on a subset
+    const AI_ANALYSIS_LIMIT = 25; // Deep AI analysis limit to stay within free tier
     
-    for (const ghCommit of commitsToProcess) {
-      const sha = ghCommit.sha;
-      const message = ghCommit.commit.message;
-      const author = ghCommit.commit.author?.name || ghCommit.commit.committer?.name || "Unknown";
-      const date = ghCommit.commit.author?.date;
+    for (let i = 0; i < ghCommits.length; i++) {
+       const ghCommit = ghCommits[i];
+       const sha = ghCommit.sha;
+       const message = ghCommit.commit.message;
+       const author = ghCommit.commit.author?.name || ghCommit.commit.committer?.name || "Unknown";
+       const date = ghCommit.commit.author?.date;
 
-      commitInfoText += `\n- ${author}: ${message}`;
+       // Save to text summary for repo-wide summary prompt
+       if (i < 50) commitInfoText += `\n- ${author}: ${message}`;
 
-      const diff = await githubService.getCommitDiff(owner, name, sha);
-      const aiAnalysis = await geminiService.analyzeCommit(message, diff);
+       let aiAnalysis;
 
-      await Commit.findOneAndUpdate(
-        { repoId: repo._id, sha: sha },
-        {
-          author, 
-          date, 
-          message,
-          classification: aiAnalysis.classification,
-          impactScore: aiAnalysis.impactScore,
-          summary: aiAnalysis.summary
-        },
-        { upsert: true }
-      );
+       // Tier 1: Deep Analysis for recent commits
+       if (i < AI_ANALYSIS_LIMIT) {
+         try {
+           const diff = await githubService.getCommitDiff(owner, name, sha);
+           aiAnalysis = await geminiService.analyzeCommit(message, diff);
+         } catch (e) {
+           aiAnalysis = { 
+             classification: geminiService.heuristicAnalyze(message),
+             impactScore: 10,
+             summary: message
+           };
+         }
+       } else {
+         // Tier 2: Heuristic analysis for the rest
+         aiAnalysis = {
+           classification: geminiService.heuristicAnalyze(message),
+           impactScore: 5,
+           summary: message
+         };
+       }
+
+       await Commit.findOneAndUpdate(
+         { repoId: repo._id, sha: sha },
+         {
+           author, 
+           date, 
+           message,
+           classification: aiAnalysis.classification,
+           impactScore: aiAnalysis.impactScore,
+           summary: aiAnalysis.summary
+         },
+         { upsert: true }
+       );
     }
 
     // Generate Repo Summary

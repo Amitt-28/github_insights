@@ -19,8 +19,18 @@ exports.getContributors = async (owner, repo) => {
 };
 
 exports.getCommits = async (owner, repo) => {
-  const response = await githubAPI.get(`/repos/${owner}/${repo}/commits`);
-  return response.data;
+  let commits = [];
+  let page = 1;
+  const maxPages = 4; // Fetch up to 400 commits max
+  while (page <= maxPages) {
+    const response = await githubAPI.get(`/repos/${owner}/${repo}/commits`, {
+      params: { per_page: 100, page }
+    });
+    commits = commits.concat(response.data);
+    if (response.data.length < 100) break;
+    page++;
+  }
+  return commits;
 };
 
 exports.getCommitDiff = async (owner, repo, sha) => {
