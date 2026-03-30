@@ -25,8 +25,8 @@ Tokyo Pulse is a high-performance engineering intelligence dashboard designed to
 
 ### Prerequisites
 
-- [Node.js](https://nodejs.org/) (v16+ recommended)
-- [MongoDB](https://www.mongodb.com/try/download/community) (Local or Atlas)
+- [Node.js](https://nodejs.org/) 
+- [MongoDB](https://www.mongodb.com/try/download/community) (Atlas)
 - [Gemini API Key](https://ai.google.dev/)
 
 ### 1. Backend Setup
